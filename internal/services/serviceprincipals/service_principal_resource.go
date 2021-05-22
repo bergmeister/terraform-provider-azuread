@@ -2,14 +2,20 @@ package serviceprincipals
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"net/http"
 
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/manicminer/hamilton/msgraph"
 
 	"github.com/hashicorp/terraform-provider-azuread/internal/clients"
+	"github.com/hashicorp/terraform-provider-azuread/internal/helpers"
 	"github.com/hashicorp/terraform-provider-azuread/internal/tf"
+	"github.com/hashicorp/terraform-provider-azuread/internal/utils"
 	"github.com/hashicorp/terraform-provider-azuread/internal/validate"
 )
 
@@ -54,8 +60,6 @@ func servicePrincipalResource() *schema.Resource {
 
 			"app_roles": schemaAppRolesComputed(),
 
-			"oauth2_permissions": schemaOauth2PermissionsComputed(), // TODO: v2.0 remove this
-
 			"oauth2_permission_scopes": schemaOauth2PermissionScopesComputed(),
 
 			"tags": {
@@ -71,29 +75,102 @@ func servicePrincipalResource() *schema.Resource {
 }
 
 func servicePrincipalResourceCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	if meta.(*clients.Client).EnableMsGraphBeta {
-		return servicePrincipalResourceCreateMsGraph(ctx, d, meta)
+	client := meta.(*clients.Client).ServicePrincipals.ServicePrincipalsClient
+
+	properties := msgraph.ServicePrincipal{
+		AccountEnabled: utils.Bool(true),
+		AppId:          utils.String(d.Get("application_id").(string)),
 	}
-	return servicePrincipalResourceCreateAadGraph(ctx, d, meta)
+
+	if v, ok := d.GetOk("app_role_assignment_required"); ok {
+		properties.AppRoleAssignmentRequired = utils.Bool(v.(bool))
+	}
+
+	if v, ok := d.GetOk("tags"); ok {
+		properties.Tags = tf.ExpandStringSlicePtr(v.(*schema.Set).List())
+	}
+
+	servicePrincipal, _, err := client.Create(ctx, properties)
+	if err != nil {
+		return tf.ErrorDiagF(err, "Could not create service principal")
+	}
+	if servicePrincipal.ID == nil || *servicePrincipal.ID == "" {
+		return tf.ErrorDiagF(errors.New("Object ID returned for service principal is nil"), "Bad API response")
+	}
+	d.SetId(*servicePrincipal.ID)
+
+	return servicePrincipalResourceRead(ctx, d, meta)
 }
 
 func servicePrincipalResourceUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	if meta.(*clients.Client).EnableMsGraphBeta {
-		return servicePrincipalResourceUpdateMsGraph(ctx, d, meta)
+	client := meta.(*clients.Client).ServicePrincipals.ServicePrincipalsClient
+
+	properties := msgraph.ServicePrincipal{
+		ID: utils.String(d.Id()),
 	}
-	return servicePrincipalResourceUpdateAadGraph(ctx, d, meta)
+
+	if d.HasChange("app_role_assignment_required") {
+		properties.AppRoleAssignmentRequired = utils.Bool(d.Get("app_role_assignment_required").(bool))
+	}
+
+	if d.HasChange("tags") {
+		if v, ok := d.GetOk("tags"); ok {
+			properties.Tags = tf.ExpandStringSlicePtr(v.(*schema.Set).List())
+		} else {
+			properties.Tags = &([]string{})
+		}
+	}
+
+	if _, err := client.Update(ctx, properties); err != nil {
+		return tf.ErrorDiagF(err, "Updating service principal with object ID: %q", d.Id())
+	}
+
+	return servicePrincipalResourceRead(ctx, d, meta)
 }
 
 func servicePrincipalResourceRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	if meta.(*clients.Client).EnableMsGraphBeta {
-		return servicePrincipalResourceReadMsGraph(ctx, d, meta)
+	client := meta.(*clients.Client).ServicePrincipals.ServicePrincipalsClient
+
+	objectId := d.Id()
+
+	servicePrincipal, status, err := client.Get(ctx, objectId)
+	if err != nil {
+		if status == http.StatusNotFound {
+			log.Printf("[DEBUG] Service Principal with Object ID %q was not found - removing from state!", objectId)
+			d.SetId("")
+			return nil
+		}
+
+		return tf.ErrorDiagF(err, "retrieving service principal with object ID: %q", d.Id())
 	}
-	return servicePrincipalResourceReadAadGraph(ctx, d, meta)
+
+	tf.Set(d, "app_role_assignment_required", servicePrincipal.AppRoleAssignmentRequired)
+	tf.Set(d, "app_roles", helpers.ApplicationFlattenAppRoles(servicePrincipal.AppRoles))
+	tf.Set(d, "application_id", servicePrincipal.AppId)
+	tf.Set(d, "display_name", servicePrincipal.DisplayName)
+	tf.Set(d, "oauth2_permission_scopes", helpers.ApplicationFlattenOAuth2PermissionScopes(servicePrincipal.PublishedPermissionScopes))
+	tf.Set(d, "object_id", servicePrincipal.ID)
+	tf.Set(d, "tags", servicePrincipal.Tags)
+
+	return nil
 }
 
 func servicePrincipalResourceDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	if meta.(*clients.Client).EnableMsGraphBeta {
-		return servicePrincipalResourceDeleteMsGraph(ctx, d, meta)
+	client := meta.(*clients.Client).ServicePrincipals.ServicePrincipalsClient
+
+	_, status, err := client.Get(ctx, d.Id())
+	if err != nil {
+		if status == http.StatusNotFound {
+			return tf.ErrorDiagPathF(fmt.Errorf("Service Principal was not found"), "id", "Retrieving service principal with object ID %q", d.Id())
+		}
+
+		return tf.ErrorDiagPathF(err, "id", "Retrieving service principal with object ID %q", d.Id())
 	}
-	return servicePrincipalResourceDeleteAadGraph(ctx, d, meta)
+
+	status, err = client.Delete(ctx, d.Id())
+	if err != nil {
+		return tf.ErrorDiagPathF(err, "id", "Deleting service principal with object ID %q, got status %d", d.Id(), status)
+	}
+
+	return nil
 }

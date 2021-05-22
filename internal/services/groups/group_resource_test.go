@@ -26,24 +26,6 @@ func TestAccGroup_basic(t *testing.T) {
 			Config: r.basic(data),
 			Check: resource.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
-				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
-			),
-		},
-		data.ImportStep(),
-	})
-}
-
-func TestAccGroup_basicDeprecated(t *testing.T) {
-	data := acceptance.BuildTestData(t, "azuread_group", "test")
-	r := GroupResource{}
-
-	data.ResourceTest(t, r, []resource.TestStep{
-		{
-			Config: r.basicDeprecated(data),
-			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).ExistsInAzure(r),
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
@@ -228,7 +210,7 @@ func TestAccGroup_preventDuplicateNamesPass(t *testing.T) {
 		{
 			Config: r.preventDuplicateNamesPass(data),
 			Check: resource.ComposeTestCheckFunc(
-				resource.TestCheckResourceAttr(data.ResourceName, "name", fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
 		data.ImportStep("prevent_duplicate_names"),
@@ -245,29 +227,14 @@ func TestAccGroup_preventDuplicateNamesFail(t *testing.T) {
 }
 
 func (r GroupResource) Exists(ctx context.Context, clients *clients.Client, state *terraform.InstanceState) (*bool, error) {
-	var id *string
-
-	if clients.EnableMsGraphBeta {
-		group, status, err := clients.Groups.MsClient.Get(ctx, state.ID)
-		if err != nil {
-			if status == http.StatusNotFound {
-				return nil, fmt.Errorf("Group with object ID %q does not exist", state.ID)
-			}
-			return nil, fmt.Errorf("failed to retrieve Group with object ID %q: %+v", state.ID, err)
+	group, status, err := clients.Groups.GroupsClient.Get(ctx, state.ID)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return nil, fmt.Errorf("Group with object ID %q does not exist", state.ID)
 		}
-		id = group.ID
-	} else {
-		resp, err := clients.Groups.AadClient.Get(ctx, state.ID)
-		if err != nil {
-			if utils.ResponseWasNotFound(resp.Response) {
-				return nil, fmt.Errorf("Group with object ID %q does not exist", state.ID)
-			}
-			return nil, fmt.Errorf("failed to retrieve Group with object ID %q: %+v", state.ID, err)
-		}
-		id = resp.ObjectID
+		return nil, fmt.Errorf("failed to retrieve Group with object ID %q: %+v", state.ID, err)
 	}
-
-	return utils.Bool(id != nil && *id == state.ID), nil
+	return utils.Bool(group.ID != nil && *group.ID == state.ID), nil
 }
 
 func (GroupResource) templateDiverseDirectoryObjects(data acceptance.TestData) string {
@@ -277,7 +244,7 @@ data "azuread_domains" "test" {
 }
 
 resource "azuread_application" "test" {
-  name = "acctestGroup-%[1]d"
+  display_name = "acctestGroup-%[1]d"
 }
 
 resource "azuread_service_principal" "test" {
@@ -291,7 +258,7 @@ resource "azuread_user" "test" {
 }
 
 resource "azuread_group" "member" {
-  name = "acctestGroup-%[1]d-Member"
+  display_name = "acctestGroup-%[1]d-Member"
 }
 `, data.RandomInteger, data.RandomPassword)
 }
@@ -327,14 +294,6 @@ func (GroupResource) basic(data acceptance.TestData) string {
 	return fmt.Sprintf(`
 resource "azuread_group" "test" {
   display_name = "acctestGroup-%[1]d"
-}
-`, data.RandomInteger)
-}
-
-func (GroupResource) basicDeprecated(data acceptance.TestData) string {
-	return fmt.Sprintf(`
-resource "azuread_group" "test" {
-  name = "acctestGroup-%[1]d"
 }
 `, data.RandomInteger)
 }
@@ -450,7 +409,7 @@ resource "azuread_group" "test" {
 func (GroupResource) withServicePrincipalMember(data acceptance.TestData) string {
 	return fmt.Sprintf(`
 resource "azuread_application" "test" {
-  name = "acctestGroup-%[1]d"
+  display_name = "acctestGroup-%[1]d"
 }
 
 resource "azuread_service_principal" "test" {
@@ -467,7 +426,7 @@ resource "azuread_group" "test" {
 func (GroupResource) withServicePrincipalOwner(data acceptance.TestData) string {
 	return fmt.Sprintf(`
 resource "azuread_application" "test" {
-  name = "acctestGroup-%[1]d"
+  display_name = "acctestGroup-%[1]d"
 }
 
 resource "azuread_service_principal" "test" {

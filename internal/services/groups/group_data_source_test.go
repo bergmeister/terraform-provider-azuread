@@ -19,7 +19,7 @@ func TestAccGroupDataSource_byName(t *testing.T) {
 		{
 			Config: GroupDataSource{}.name(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
 	})
@@ -31,20 +31,7 @@ func TestAccGroupDataSource_byNameWithSecurity(t *testing.T) {
 		{
 			Config: GroupDataSource{}.nameSecurity(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
-			),
-		},
-	})
-}
-
-func TestAccGroupDataSource_byNameDeprecated(t *testing.T) {
-	data := acceptance.BuildTestData(t, "data.azuread_group", "test")
-
-	data.DataSourceTest(t, []resource.TestStep{
-		{
-			Config: GroupDataSource{}.nameDeprecated(data),
-			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
 	})
@@ -57,7 +44,7 @@ func TestAccGroupDataSource_byCaseInsensitiveName(t *testing.T) {
 		{
 			Config: GroupDataSource{}.caseInsensitiveName(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
 	})
@@ -70,7 +57,7 @@ func TestAccGroupDataSource_byObjectId(t *testing.T) {
 		{
 			Config: GroupDataSource{}.objectId(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
 	})
@@ -83,7 +70,7 @@ func TestAccGroupDataSource_byObjectIdWithSecurity(t *testing.T) {
 		{
 			Config: GroupDataSource{}.objectIdSecurity(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 			),
 		},
 	})
@@ -96,7 +83,7 @@ func TestAccGroupDataSource_members(t *testing.T) {
 		{
 			Config: GroupDataSource{}.members(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 				check.That(data.ResourceName).Key("members.#").HasValue("3"),
 			),
 		},
@@ -110,7 +97,7 @@ func TestAccGroupDataSource_owners(t *testing.T) {
 		{
 			Config: GroupDataSource{}.owners(data),
 			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
+				check.That(data.ResourceName).Key("display_name").HasValue(fmt.Sprintf("acctestGroup-%d", data.RandomInteger)),
 				check.That(data.ResourceName).Key("owners.#").HasValue("3"),
 			),
 		},
@@ -123,16 +110,6 @@ func (GroupDataSource) name(data acceptance.TestData) string {
 
 data "azuread_group" "test" {
   display_name = azuread_group.test.name
-}
-`, GroupResource{}.basic(data))
-}
-
-func (GroupDataSource) nameDeprecated(data acceptance.TestData) string {
-	return fmt.Sprintf(`
-%[1]s
-
-data "azuread_group" "test" {
-  name = azuread_group.test.name
 }
 `, GroupResource{}.basic(data))
 }

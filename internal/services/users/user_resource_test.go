@@ -98,30 +98,14 @@ func TestAccUser_threeUsersABC(t *testing.T) {
 }
 
 func (r UserResource) Exists(ctx context.Context, clients *clients.Client, state *terraform.InstanceState) (*bool, error) {
-	var id *string
-
-	if clients.EnableMsGraphBeta {
-		user, status, err := clients.Users.MsClient.Get(ctx, state.ID)
-		if err != nil {
-			if status == http.StatusNotFound {
-				return nil, fmt.Errorf("User with object ID %q does not exist", state.ID)
-			}
-			return nil, fmt.Errorf("failed to retrieve User with object ID %q: %+v", state.ID, err)
+	user, status, err := clients.Users.UsersClient.Get(ctx, state.ID)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return nil, fmt.Errorf("User with object ID %q does not exist", state.ID)
 		}
-		id = user.ID
-	} else {
-		resp, err := clients.Users.AadClient.Get(ctx, state.ID)
-
-		if err != nil {
-			if utils.ResponseWasNotFound(resp.Response) {
-				return nil, fmt.Errorf("User with object ID %q does not exist", state.ID)
-			}
-			return nil, fmt.Errorf("failed to retrieve User with object ID %q: %+v", state.ID, err)
-		}
-		id = resp.ObjectID
+		return nil, fmt.Errorf("failed to retrieve User with object ID %q: %+v", state.ID, err)
 	}
-
-	return utils.Bool(id != nil && *id == state.ID), nil
+	return utils.Bool(user.ID != nil && *user.ID == state.ID), nil
 }
 
 func (UserResource) basic(data acceptance.TestData) string {

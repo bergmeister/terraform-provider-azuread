@@ -79,30 +79,14 @@ func TestAccServicePrincipal_update(t *testing.T) {
 }
 
 func (r ServicePrincipalResource) Exists(ctx context.Context, clients *clients.Client, state *terraform.InstanceState) (*bool, error) {
-	var id *string
-
-	if clients.EnableMsGraphBeta {
-		app, status, err := clients.ServicePrincipals.MsClient.Get(ctx, state.ID)
-		if err != nil {
-			if status == http.StatusNotFound {
-				return nil, fmt.Errorf("Service Principal with object ID %q does not exist", state.ID)
-			}
-			return nil, fmt.Errorf("failed to retrieve Service Principal with object ID %q: %+v", state.ID, err)
+	servicePrincipal, status, err := clients.ServicePrincipals.ServicePrincipalsClient.Get(ctx, state.ID)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return nil, fmt.Errorf("Service Principal with object ID %q does not exist", state.ID)
 		}
-		id = app.ID
-	} else {
-		resp, err := clients.ServicePrincipals.AadClient.Get(ctx, state.ID)
-
-		if err != nil {
-			if utils.ResponseWasNotFound(resp.Response) {
-				return nil, fmt.Errorf("Service Principal with object ID %q does not exist", state.ID)
-			}
-			return nil, fmt.Errorf("failed to retrieve Service Principal with object ID %q: %+v", state.ID, err)
-		}
-		id = resp.ObjectID
+		return nil, fmt.Errorf("failed to retrieve Service Principal with object ID %q: %+v", state.ID, err)
 	}
-
-	return utils.Bool(id != nil && *id == state.ID), nil
+	return utils.Bool(servicePrincipal.ID != nil && *servicePrincipal.ID == state.ID), nil
 }
 
 func (ServicePrincipalResource) basic(data acceptance.TestData) string {
@@ -148,7 +132,8 @@ resource "azuread_application" "test" {
     allowed_member_types = ["User"]
     description          = "Admins can manage roles and perform all task actions"
     display_name         = "Admin"
-    is_enabled           = true
+    enabled              = true
+    id                   = "%[4]s"
     value                = "superAdmin"
   }
 
@@ -156,7 +141,8 @@ resource "azuread_application" "test" {
     allowed_member_types = ["User"]
     description          = "ReadOnly roles have limited query access"
     display_name         = "ReadOnly"
-    is_enabled           = true
+    enabled              = true
+    id                   = "%[5]s"
     value                = "readOnlyUser"
   }
 }
@@ -167,5 +153,5 @@ resource "azuread_service_principal" "test" {
 
   tags = ["test", "multiple", "CapitalS"]
 }
-`, data.RandomInteger, data.UUID(), data.UUID())
+`, data.RandomInteger, data.UUID(), data.UUID(), data.UUID(), data.UUID())
 }

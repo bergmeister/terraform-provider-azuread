@@ -12,8 +12,7 @@ import (
 	"github.com/hashicorp/terraform-provider-azuread/internal/acceptance"
 	"github.com/hashicorp/terraform-provider-azuread/internal/acceptance/check"
 	"github.com/hashicorp/terraform-provider-azuread/internal/clients"
-	"github.com/hashicorp/terraform-provider-azuread/internal/helpers/aadgraph"
-	"github.com/hashicorp/terraform-provider-azuread/internal/helpers/msgraph"
+	"github.com/hashicorp/terraform-provider-azuread/internal/helpers"
 	"github.com/hashicorp/terraform-provider-azuread/internal/services/applications/parse"
 	"github.com/hashicorp/terraform-provider-azuread/internal/utils"
 )
@@ -105,36 +104,19 @@ func (a ApplicationAppRoleResource) Exists(ctx context.Context, clients *clients
 		return nil, fmt.Errorf("parsing App Role ID: %v", err)
 	}
 
-	if clients.EnableMsGraphBeta {
-		app, status, err := clients.Applications.MsClient.Get(ctx, id.ObjectId)
-		if err != nil {
-			if status == http.StatusNotFound {
-				return nil, fmt.Errorf("Application with object ID %q does not exist", id.ObjectId)
-			}
-			return nil, fmt.Errorf("failed to retrieve Application with object ID %q: %+v", id.ObjectId, err)
+	app, status, err := clients.Applications.ApplicationsClient.Get(ctx, id.ObjectId)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return nil, fmt.Errorf("Application with object ID %q does not exist", id.ObjectId)
 		}
+		return nil, fmt.Errorf("failed to retrieve Application with object ID %q: %+v", id.ObjectId, err)
+	}
 
-		role, err := msgraph.AppRoleFindById(app, id.RoleId)
-		if err != nil {
-			return nil, fmt.Errorf("failed to identity App Role: %s", err)
-		} else if role != nil {
-			return utils.Bool(true), nil
-		}
-	} else {
-		resp, err := clients.Applications.AadClient.Get(ctx, id.ObjectId)
-		if err != nil {
-			if utils.ResponseWasNotFound(resp.Response) {
-				return nil, fmt.Errorf("Application with object ID %q does not exist", id.ObjectId)
-			}
-			return nil, fmt.Errorf("failed to retrieve Application with object ID %q: %+v", id.ObjectId, err)
-		}
-
-		role, err := aadgraph.AppRoleFindById(resp, id.RoleId)
-		if err != nil {
-			return nil, fmt.Errorf("failed to identity App Role: %s", err)
-		} else if role != nil {
-			return utils.Bool(true), nil
-		}
+	role, err := helpers.AppRoleFindById(app, id.RoleId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to identity App Role: %s", err)
+	} else if role != nil {
+		return utils.Bool(true), nil
 	}
 
 	return nil, fmt.Errorf("App Role %q was not found in Application %q", id.RoleId, id.ObjectId)
@@ -157,7 +139,7 @@ resource "azuread_application_app_role" "test" {
   allowed_member_types  = ["User"]
   description           = "Admins can manage roles and perform all task actions"
   display_name          = "Admin"
-  is_enabled            = true
+  enabled               = true
 }
 `, r.template(data))
 }
@@ -171,7 +153,7 @@ resource "azuread_application_app_role" "test" {
   allowed_member_types  = ["User"]
   description           = "Admins can manage roles and perform all task actions"
   display_name          = "Admin"
-  is_enabled            = true
+  enabled               = true
   role_id               = "%[2]s"
   value                 = "administer"
 }
@@ -187,7 +169,7 @@ resource "azuread_application_app_role" "test" {
   allowed_member_types  = ["Application", "User"]
   description           = "Administrators can administrate all the things"
   display_name          = "Administrate"
-  is_enabled            = true
+  enabled               = true
   role_id               = "%[2]s"
   value                 = "administrate"
 }
@@ -203,7 +185,7 @@ resource "azuread_application_app_role" "import" {
   allowed_member_types  = azuread_application_app_role.test.allowed_member_types
   description           = azuread_application_app_role.test.description
   display_name          = azuread_application_app_role.test.display_name
-  is_enabled            = azuread_application_app_role.test.is_enabled
+  enabled               = azuread_application_app_role.test.enabled
   role_id               = azuread_application_app_role.test.role_id
 }
 `, r.basic(data))

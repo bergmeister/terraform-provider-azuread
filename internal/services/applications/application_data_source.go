@@ -2,10 +2,16 @@ package applications
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/manicminer/hamilton/msgraph"
+
 	"github.com/hashicorp/terraform-provider-azuread/internal/clients"
+	"github.com/hashicorp/terraform-provider-azuread/internal/helpers"
+	"github.com/hashicorp/terraform-provider-azuread/internal/tf"
 	"github.com/hashicorp/terraform-provider-azuread/internal/validate"
 )
 
@@ -18,7 +24,7 @@ func applicationDataSource() *schema.Resource {
 				Type:             schema.TypeString,
 				Optional:         true,
 				Computed:         true,
-				ExactlyOneOf:     []string{"application_id", "display_name", "name", "object_id"},
+				ExactlyOneOf:     []string{"application_id", "display_name", "object_id"},
 				ValidateDiagFunc: validate.UUID,
 			},
 
@@ -26,7 +32,7 @@ func applicationDataSource() *schema.Resource {
 				Type:             schema.TypeString,
 				Optional:         true,
 				Computed:         true,
-				ExactlyOneOf:     []string{"application_id", "display_name", "name", "object_id"},
+				ExactlyOneOf:     []string{"application_id", "display_name", "object_id"},
 				ValidateDiagFunc: validate.UUID,
 			},
 
@@ -34,17 +40,7 @@ func applicationDataSource() *schema.Resource {
 				Type:             schema.TypeString,
 				Optional:         true,
 				Computed:         true,
-				ExactlyOneOf:     []string{"application_id", "display_name", "name", "object_id"},
-				ValidateDiagFunc: validate.NoEmptyStrings,
-			},
-
-			// TODO: remove in v2.0
-			"name": {
-				Type:             schema.TypeString,
-				Optional:         true,
-				Computed:         true,
-				Deprecated:       "This property has been renamed to `display_name` and will be removed in version 2.0 of the AzureAD provider",
-				ExactlyOneOf:     []string{"application_id", "display_name", "name", "object_id"},
+				ExactlyOneOf:     []string{"application_id", "display_name", "object_id"},
 				ValidateDiagFunc: validate.NoEmptyStrings,
 			},
 
@@ -77,13 +73,6 @@ func applicationDataSource() *schema.Resource {
 									"enabled": {
 										Type:     schema.TypeBool,
 										Computed: true,
-									},
-
-									// TODO: v2.0 remove this
-									"is_enabled": {
-										Type:       schema.TypeBool,
-										Computed:   true,
-										Deprecated: "[NOTE] This attribute has been renamed to `enabled` and will be removed in version 2.0 of the AzureAD provider",
 									},
 
 									"type": {
@@ -146,26 +135,12 @@ func applicationDataSource() *schema.Resource {
 							Computed: true,
 						},
 
-						// TODO: v2.0 remove this
-						"is_enabled": {
-							Type:       schema.TypeBool,
-							Computed:   true,
-							Deprecated: "[NOTE] This attribute will be renamed to `enabled` in version 2.0 of the AzureAD provider",
-						},
-
 						"value": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
 					},
 				},
-			},
-
-			// TODO: v2.0 remove this
-			"available_to_other_tenants": {
-				Type:       schema.TypeBool,
-				Computed:   true,
-				Deprecated: "[NOTE] This attribute will be replaced by a new property `sign_in_audience` in version 2.0 of the AzureAD provider",
 			},
 
 			"fallback_public_client_enabled": {
@@ -178,88 +153,11 @@ func applicationDataSource() *schema.Resource {
 				Computed: true,
 			},
 
-			// TODO: v2.0 remove this
-			"homepage": {
-				Type:       schema.TypeString,
-				Computed:   true,
-				Deprecated: "[NOTE] This attribute will be moved into the `web` block in version 2.0 of the AzureAD provider",
-			},
-
 			"identifier_uris": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
-				},
-			},
-
-			// TODO: v2.0 remove this
-			"logout_url": {
-				Type:       schema.TypeString,
-				Computed:   true,
-				Deprecated: "[NOTE] This attribute will be moved into the `web` block in version 2.0 of the AzureAD provider",
-			},
-
-			// TODO: v2.0 remove this
-			"oauth2_allow_implicit_flow": {
-				Type:       schema.TypeBool,
-				Computed:   true,
-				Deprecated: "[NOTE] This attribute will be moved to the `implicit_grant` block and renamed to `access_token_issuance_enabled` in version 2.0 of the AzureAD provider",
-			},
-
-			// TODO: v2.0 remove this block
-			"oauth2_permissions": {
-				Type:       schema.TypeList,
-				Optional:   true,
-				Computed:   true,
-				Deprecated: "[NOTE] The `oauth2_permissions` block has been renamed to `oauth2_permission_scopes` and moved to the `api` block. `oauth2_permissions` will be removed in version 2.0 of the AzureAD provider.",
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"admin_consent_description": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-
-						"admin_consent_display_name": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-
-						"id": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-
-						"enabled": {
-							Type:     schema.TypeBool,
-							Computed: true,
-						},
-
-						"is_enabled": {
-							Type:     schema.TypeBool,
-							Computed: true,
-						},
-
-						"type": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-
-						"user_consent_description": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-
-						"user_consent_display_name": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-
-						"value": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
 				},
 			},
 
@@ -280,16 +178,6 @@ func applicationDataSource() *schema.Resource {
 			"owners": {
 				Type:     schema.TypeList,
 				Computed: true,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
-				},
-			},
-
-			// TODO: v2.0 remove this
-			"reply_urls": {
-				Type:       schema.TypeList,
-				Computed:   true,
-				Deprecated: "[NOTE] This attribute will be replaced by a new attribute `redirect_uris` in the `web` block in version 2.0 of the AzureAD provider",
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
@@ -329,13 +217,6 @@ func applicationDataSource() *schema.Resource {
 			"sign_in_audience": {
 				Type:     schema.TypeString,
 				Computed: true,
-			},
-
-			// TODO: v2.0 drop this, there's no such distinction any more
-			"type": {
-				Type:       schema.TypeString,
-				Computed:   true,
-				Deprecated: "[NOTE] This legacy property is deprecated and will be removed in version 2.0 of the AzureAD provider",
 			},
 
 			"web": {
@@ -385,8 +266,95 @@ func applicationDataSource() *schema.Resource {
 }
 
 func applicationDataSourceRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	if meta.(*clients.Client).EnableMsGraphBeta {
-		return applicationDataSourceReadMsGraph(ctx, d, meta)
+	client := meta.(*clients.Client).Applications.ApplicationsClient
+
+	var app *msgraph.Application
+
+	if objectId, ok := d.Get("object_id").(string); ok && objectId != "" {
+		var status int
+		var err error
+		app, status, err = client.Get(ctx, objectId)
+		if err != nil {
+			if status == http.StatusNotFound {
+				return tf.ErrorDiagPathF(nil, "object_id", "Application with object ID %q was not found", objectId)
+			}
+
+			return tf.ErrorDiagPathF(err, "object_id", "Retrieving Application with object ID %q", objectId)
+		}
+	} else {
+		var fieldName, fieldValue string
+		if applicationId, ok := d.Get("application_id").(string); ok && applicationId != "" {
+			fieldName = "appId"
+			fieldValue = applicationId
+		} else if displayName, ok := d.Get("display_name").(string); ok && displayName != "" {
+			fieldName = "displayName"
+			fieldValue = displayName
+		} else {
+			return tf.ErrorDiagF(nil, "One of `object_id`, `application_id` or `displayName` must be specified")
+		}
+
+		filter := fmt.Sprintf("%s eq '%s'", fieldName, fieldValue)
+
+		result, _, err := client.List(ctx, filter)
+		if err != nil {
+			return tf.ErrorDiagF(err, "Listing applications for filter %q", filter)
+		}
+
+		switch {
+		case result == nil || len(*result) == 0:
+			return tf.ErrorDiagF(fmt.Errorf("No applications found matching filter: %q", filter), "Application not found")
+		case len(*result) > 1:
+			return tf.ErrorDiagF(fmt.Errorf("Found multiple applications matching filter: %q", filter), "Multiple applications found")
+		}
+
+		app = &(*result)[0]
+		switch fieldName {
+		case "appId":
+			if app.AppId == nil {
+				return tf.ErrorDiagF(fmt.Errorf("nil AppID for applications matching filter: %q", filter), "Bad API Response")
+			}
+			if *app.AppId != fieldValue {
+				return tf.ErrorDiagF(fmt.Errorf("AppID does not match (%q != %q) for applications matching filter: %q", *app.AppId, fieldValue, filter), "Bad API Response")
+			}
+		case "displayName":
+			if app.DisplayName == nil {
+				return tf.ErrorDiagF(fmt.Errorf("nil displayName for applications matching filter: %q", filter), "Bad API Response")
+			}
+			if *app.DisplayName != fieldValue {
+				return tf.ErrorDiagF(fmt.Errorf("DisplayName does not match (%q != %q) for applications matching filter: %q", *app.DisplayName, fieldValue, filter), "Bad API Response")
+			}
+		}
 	}
-	return applicationDataSourceReadAadGraph(ctx, d, meta)
+
+	if app == nil {
+		return tf.ErrorDiagF(fmt.Errorf("app was unexpectedly nil"), "Application not found")
+	}
+
+	if app.ID == nil {
+		return tf.ErrorDiagF(fmt.Errorf("Object ID returned for application is nil"), "Bad API Response")
+	}
+
+	d.SetId(*app.ID)
+
+	tf.Set(d, "api", helpers.ApplicationFlattenApi(app.Api, true))
+	tf.Set(d, "app_roles", helpers.ApplicationFlattenAppRoles(app.AppRoles))
+	tf.Set(d, "application_id", app.AppId)
+	tf.Set(d, "available_to_other_tenants", app.SignInAudience == msgraph.SignInAudienceAzureADMultipleOrgs)
+	tf.Set(d, "display_name", app.DisplayName)
+	tf.Set(d, "fallback_public_client_enabled", app.IsFallbackPublicClient)
+	tf.Set(d, "group_membership_claims", helpers.ApplicationFlattenGroupMembershipClaims(app.GroupMembershipClaims))
+	tf.Set(d, "identifier_uris", tf.FlattenStringSlicePtr(app.IdentifierUris))
+	tf.Set(d, "object_id", app.ID)
+	tf.Set(d, "optional_claims", flattenApplicationOptionalClaims(app.OptionalClaims))
+	tf.Set(d, "required_resource_access", flattenApplicationRequiredResourceAccess(app.RequiredResourceAccess))
+	tf.Set(d, "sign_in_audience", string(app.SignInAudience))
+	tf.Set(d, "web", helpers.ApplicationFlattenWeb(app.Web))
+
+	owners, _, err := client.ListOwners(ctx, *app.ID)
+	if err != nil {
+		return tf.ErrorDiagPathF(err, "owners", "Could not retrieve owners for application with object ID %q", *app.ID)
+	}
+	tf.Set(d, "owners", owners)
+
+	return nil
 }

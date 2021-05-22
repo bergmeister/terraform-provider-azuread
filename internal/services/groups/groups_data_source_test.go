@@ -26,20 +26,6 @@ func TestAccGroupsDataSource_byDisplayNames(t *testing.T) {
 	})
 }
 
-func TestAccGroupsDataSource_byNamesDeprecated(t *testing.T) {
-	data := acceptance.BuildTestData(t, "data.azuread_groups", "test")
-
-	data.DataSourceTest(t, []resource.TestStep{
-		{
-			Config: GroupsDataSource{}.byNamesDeprecated(data),
-			Check: resource.ComposeTestCheckFunc(
-				check.That(data.ResourceName).Key("names.#").HasValue("2"),
-				check.That(data.ResourceName).Key("object_ids.#").HasValue("2"),
-			),
-		},
-	})
-}
-
 func TestAccGroupsDataSource_byObjectIds(t *testing.T) {
 	data := acceptance.BuildTestData(t, "data.azuread_groups", "test")
 
@@ -86,16 +72,6 @@ func (GroupsDataSource) byDisplayNames(data acceptance.TestData) string {
 
 data "azuread_groups" "test" {
   display_names = [azuread_group.testA.name, azuread_group.testB.name]
-}
-`, GroupsDataSource{}.template(data))
-}
-
-func (GroupsDataSource) byNamesDeprecated(data acceptance.TestData) string {
-	return fmt.Sprintf(`
-%[1]s
-
-data "azuread_groups" "test" {
-  names = [azuread_group.testA.name, azuread_group.testB.name]
 }
 `, GroupsDataSource{}.template(data))
 }
